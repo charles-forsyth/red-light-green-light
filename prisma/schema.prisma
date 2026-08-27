@@ -1,0 +1,85 @@
+// Prisma Schema for Red Light, Green Light (RLGL)
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  MEMBER
+  PREMIUM
+  ADMIN
+}
+
+enum PreferenceType {
+  GIVE
+  RECEIVE
+  GIVE_OR_RECEIVE
+  HANGOUT
+}
+
+enum VisibilityStatus {
+  GREEN_LIGHT
+  YELLOW_LIGHT
+  RED_LIGHT
+}
+
+model User {
+  id                 String               @id @default(uuid())
+  handle             String               @unique
+  email              String               @unique
+  passwordHash       String
+  role               Role                 @default(MEMBER)
+  stripeCustomerId   String?
+  subscriptionActive Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  reservations       BoothReservation[]
+  messagesSent       DirectMessage[]      @relation("SentMessages")
+  messagesReceived   DirectMessage[]      @relation("ReceivedMessages")
+}
+
+model Venue {
+  id          String             @id @default(uuid())
+  name        String
+  address     String
+  latitude    Float
+  longitude   Float
+  boothCount  Int                @default(12)
+  createdAt   DateTime           @default(now())
+
+  reservations BoothReservation[]
+}
+
+model BoothReservation {
+  id               String           @id @default(uuid())
+  userId           String
+  venueId          String
+  boothNumber      Int?
+  startTime        DateTime
+  endTime          DateTime
+  status           VisibilityStatus @default(GREEN_LIGHT)
+  preference       PreferenceType   @default(HANGOUT)
+  note             String?
+  createdAt        DateTime         @default(now())
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venue            Venue            @relation(fields: [venueId], references: [id], onDelete: Cascade)
+}
+
+model DirectMessage {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  content     String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+}
