@@ -1,13 +1,21 @@
 "use client";
 
 import React, { useState } from "react";
-import { Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw } from "lucide-react";
+import { Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users, Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle } from "lucide-react";
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
-import { BoothReservation, PreferenceType, VisibilityStatus } from "@/types";
+import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile } from "@/types";
+
+const INITIAL_USERS: UserProfile[] = [
+  { id: "user-101", handle: "NeonKnight99", email: "neon99@proton.me", subscriptionActive: true, role: "PREMIUM" },
+  { id: "user-102", handle: "MidnightRider", email: "rider@anonmail.com", subscriptionActive: true, role: "PREMIUM" },
+  { id: "user-103", handle: "ShadowWalker", email: "shadow@tempmail.io", subscriptionActive: true, role: "MEMBER" },
+  { id: "user-104", handle: "CrimsonViper", email: "viper@secure.net", subscriptionActive: false, role: "MEMBER" },
+  { id: "user-admin", handle: "CaptainChuck", email: "admin@rlgl.app", subscriptionActive: true, role: "ADMIN" },
+];
 
 export default function Dashboard() {
   const [selectedVenueId, setSelectedVenueId] = useState<string>("venue-lawrenceville");
-  const [activeTab, setActiveTab] = useState<"map" | "booths" | "new_reservation" | "membership">("booths");
+  const [activeTab, setActiveTab] = useState<"map" | "booths" | "new_reservation" | "admin">("booths");
   const [searchQuery, setSearchQuery] = useState("");
   const [panicMode, setPanicMode] = useState(false);
 
@@ -17,6 +25,10 @@ export default function Dashboard() {
   const [newPref, setNewPreference] = useState<PreferenceType>("HANGOUT");
   const [newNote, setNewNote] = useState("");
   const [reservations, setReservations] = useState<BoothReservation[]>(MOCK_RESERVATIONS);
+
+  // Admin User Management State
+  const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
+  const [adminSearch, setAdminSearch] = useState("");
 
   if (panicMode) {
     return (
@@ -42,11 +54,29 @@ export default function Dashboard() {
     (r) => r.venueId === selectedVenueId && (searchQuery === "" || r.userHandle.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const filteredUsers = users.filter(
+    (u) => adminSearch === "" || u.handle.toLowerCase().includes(adminSearch.toLowerCase()) || u.email.toLowerCase().includes(adminSearch.toLowerCase())
+  );
+
+  const toggleUserSubscription = (userId: string) => {
+    setUsers(users.map((u) => (u.id === userId ? { ...u, subscriptionActive: !u.subscriptionActive } : u)));
+  };
+
+  const toggleUserRole = (userId: string) => {
+    setUsers(users.map((u) => {
+      if (u.id === userId) {
+        const nextRole = u.role === "MEMBER" ? "PREMIUM" : u.role === "PREMIUM" ? "ADMIN" : "MEMBER";
+        return { ...u, role: nextRole };
+      }
+      return u;
+    }));
+  };
+
   const handleCreateReservation = (e: React.FormEvent) => {
     e.preventDefault();
     const created: BoothReservation = {
       id: `res-${Date.now()}`,
-      userId: "user-current",
+      userId: "user-admin",
       userHandle: "CaptainChuck (You)",
       venueId: selectedVenueId,
       venueName: selectedVenue.name,
@@ -62,6 +92,10 @@ export default function Dashboard() {
     setActiveTab("booths");
     setNewNote("");
   };
+
+  // FinOps Stats Calculation
+  const activeSubs = users.filter((u) => u.subscriptionActive).length;
+  const mrr = activeSubs * 5.0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -96,8 +130,8 @@ export default function Dashboard() {
           <div className="hidden sm:flex items-center space-x-2 bg-slate-800/60 border border-slate-700/50 px-3 py-1.5 rounded-full text-xs">
             <User className="w-3.5 h-3.5 text-emerald-400" />
             <span className="font-semibold text-slate-200">CaptainChuck</span>
-            <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-full border border-emerald-500/30">
-              PRO $5/MO
+            <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded-full border border-amber-500/30">
+              SYSTEM ADMIN
             </span>
           </div>
         </div>
@@ -141,26 +175,29 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Membership Tier Card */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-amber-500/30 rounded-xl p-4 relative overflow-hidden shadow-lg">
+          {/* Admin FinOps Stats Card */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/30 rounded-xl p-4 relative overflow-hidden shadow-lg">
             <div className="absolute top-0 right-0 p-3 opacity-10">
-              <Flame className="w-24 h-24 text-amber-500" />
+              <DollarSign className="w-24 h-24 text-emerald-500" />
             </div>
-            <h3 className="text-sm font-bold text-amber-300 flex items-center space-x-2">
-              <Lock className="w-4 h-4 text-amber-400" />
-              <span>RLGL Membership Tier</span>
+            <h3 className="text-sm font-bold text-emerald-300 flex items-center space-x-2">
+              <CreditCard className="w-4 h-4 text-emerald-400" />
+              <span>SaaS Revenue & MRR Stats</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Your $5/mo membership gives you unlimited venue reservations, discrete direct messaging, and live presence updates.
-            </p>
-            <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-              <span className="text-emerald-400 font-semibold">Active Status: Verified</span>
-              <span className="text-slate-500">Auto-renews Sep 27</span>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Active Subscriptions</span>
+                <span className="text-lg font-extrabold text-emerald-400">{activeSubs} Members</span>
+              </div>
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Monthly Recurring (MRR)</span>
+                <span className="text-lg font-extrabold text-amber-400">${mrr.toFixed(2)}/mo</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Interactive Booth Reservations & Presence Feed */}
+        {/* Right Column: Interactive Booths, Timeslot Form & Admin Portal */}
         <div className="lg:col-span-8 space-y-4">
           {/* Action Navigation Tabs */}
           <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-xl flex items-center justify-between">
@@ -180,6 +217,15 @@ export default function Dashboard() {
                 }`}
               >
                 + Post Timeslot
+              </button>
+              <button
+                onClick={() => setActiveTab("admin")}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                  activeTab === "admin" ? "bg-slate-800 text-amber-400 border border-amber-500/30" : "text-amber-400/70 hover:text-amber-300"
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>Admin Portal</span>
               </button>
             </div>
 
@@ -354,6 +400,87 @@ export default function Dashboard() {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Admin Account Management Portal */}
+          {activeTab === "admin" && (
+            <div className="bg-slate-900 border border-amber-500/30 rounded-xl p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center space-x-2">
+                  <Shield className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-extrabold text-slate-100">RLGL Admin User & Membership Console</h3>
+                </div>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Filter user or email..."
+                    value={adminSearch}
+                    onChange={(e) => setAdminSearch(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                Manage user accounts, Stripe subscription statuses ($5/mo), and assign administrative privileges.
+              </p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase bg-slate-950/60">
+                      <th className="p-3">Handle</th>
+                      <th className="p-3">Discrete Email</th>
+                      <th className="p-3">Role</th>
+                      <th className="p-3">Subscription</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-xs">
+                    {filteredUsers.map((user) => (
+                      <tr key={user.id} className="hover:bg-slate-800/40 transition">
+                        <td className="p-3 font-bold text-slate-200">{user.handle}</td>
+                        <td className="p-3 font-mono text-slate-400">{user.email}</td>
+                        <td className="p-3">
+                          <button
+                            onClick={() => toggleUserRole(user.id)}
+                            className="px-2 py-0.5 text-[10px] font-bold rounded border bg-slate-800 text-amber-300 border-amber-500/30 hover:border-amber-400 transition"
+                          >
+                            {user.role}
+                          </button>
+                        </td>
+                        <td className="p-3">
+                          {user.subscriptionActive ? (
+                            <span className="inline-flex items-center space-x-1 text-emerald-400 font-bold">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Active ($5/mo)</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 text-rose-400 font-bold">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span>Inactive / Canceled</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => toggleUserSubscription(user.id)}
+                            className={`px-3 py-1 rounded text-xs font-bold transition border ${
+                              user.subscriptionActive
+                                ? "bg-rose-950/60 text-rose-300 border-rose-800/50 hover:bg-rose-900"
+                                : "bg-emerald-950/60 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900"
+                            }`}
+                          >
+                            {user.subscriptionActive ? "Cancel Sub" : "Activate $5/mo"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
