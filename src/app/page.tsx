@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users, Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle } from "lucide-react";
+import {
+  Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users,
+  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key
+} from "lucide-react";
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
-import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile } from "@/types";
+import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile, Venue } from "@/types";
 
 const INITIAL_USERS: UserProfile[] = [
   { id: "user-101", handle: "NeonKnight99", email: "neon99@proton.me", subscriptionActive: true, role: "PREMIUM" },
@@ -13,35 +16,65 @@ const INITIAL_USERS: UserProfile[] = [
   { id: "user-admin", handle: "CaptainChuck", email: "admin@rlgl.app", subscriptionActive: true, role: "ADMIN" },
 ];
 
-export default function Dashboard() {
+export default function Application() {
+  // Authentication & Session State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [loginHandle, setLoginHandle] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [ageVerified, setAgeVerified] = useState(false);
+
+  // App Core State
+  const [venues, setVenues] = useState<Venue[]>(MOCK_VENUES);
   const [selectedVenueId, setSelectedVenueId] = useState<string>("venue-lawrenceville");
-  const [activeTab, setActiveTab] = useState<"map" | "booths" | "new_reservation" | "admin">("booths");
+  const [activeTab, setActiveTab] = useState<"booths" | "map" | "new_reservation" | "profile" | "admin">("booths");
   const [searchQuery, setSearchQuery] = useState("");
   const [panicMode, setPanicMode] = useState(false);
 
-  // New Reservation Form State
+  // Reservations State
+  const [reservations, setReservations] = useState<BoothReservation[]>(MOCK_RESERVATIONS);
   const [newBooth, setNewBooth] = useState<number>(4);
   const [newStatus, setNewStatus] = useState<VisibilityStatus>("GREEN_LIGHT");
   const [newPref, setNewPreference] = useState<PreferenceType>("HANGOUT");
   const [newNote, setNewNote] = useState("");
-  const [reservations, setReservations] = useState<BoothReservation[]>(MOCK_RESERVATIONS);
 
-  // Admin User Management State
+  // Admin User & Venue CRUD State
   const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
   const [adminSearch, setAdminSearch] = useState("");
+  const [adminView, setAdminView] = useState<"users" | "venues">("users");
 
+  // Admin Modal / New User / New Venue Form State
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newAdminHandle, setNewAdminHandle] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminRole, setNewAdminRole] = useState<"MEMBER" | "PREMIUM" | "ADMIN">("MEMBER");
+
+  const [showAddVenueModal, setShowAddVenueModal] = useState(false);
+  const [newVenueName, setNewVenueName] = useState("");
+  const [newVenueAddress, setNewVenueAddress] = useState("");
+  const [newVenueBooths, setNewVenueBooths] = useState(12);
+
+  // Messaging Modal State
+  const [messagingTarget, setMessagingTarget] = useState<string | null>(null);
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatHistory, setChatMessageHistory] = useState<Record<string, string[]>>({});
+
+  // Self-Service Profile State
+  const [editHandle, setEditHandle] = useState("");
+
+  // PANIC HIDE SCREEN
   if (panicMode) {
     return (
-      <div className="min-h-screen bg-white p-8 font-sans text-gray-800">
-        <h1 className="text-3xl font-bold mb-4">National Weather Service — Tioga County Regional Radar</h1>
-        <p className="mb-4">Current Conditions: 68°F — Mostly Sunny, Winds WSW at 6 mph.</p>
-        <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg max-w-xl">
-          <h2 className="font-semibold text-lg text-blue-900 mb-2">Extended 5-Day Forecast</h2>
-          <p className="text-sm text-blue-800">High pressure system moving across northern Pennsylvania. Dry conditions expected through Saturday evening.</p>
+      <div className="min-h-screen bg-slate-900 p-8 font-sans text-slate-100">
+        <h1 className="text-3xl font-bold mb-4 text-sky-400">National Weather Service — Tioga County Regional Radar</h1>
+        <p className="mb-4 text-slate-300">Current Conditions: 68°F — Mostly Sunny, Winds WSW at 6 mph.</p>
+        <div className="p-6 bg-slate-800 border border-slate-700 rounded-lg max-w-xl shadow-lg">
+          <h2 className="font-semibold text-lg text-sky-300 mb-2">Extended 5-Day Regional Forecast</h2>
+          <p className="text-sm text-slate-300">High pressure system moving across northern Pennsylvania and New York Southern Tier. Dry conditions expected through Saturday evening.</p>
         </div>
-        <button 
+        <button
           onClick={() => setPanicMode(false)}
-          className="mt-8 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-xs text-gray-600"
+          className="mt-8 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 rounded text-xs transition"
         >
           Restore View
         </button>
@@ -49,7 +82,202 @@ export default function Dashboard() {
     );
   }
 
-  const selectedVenue = MOCK_VENUES.find((v) => v.id === selectedVenueId) || MOCK_VENUES[0];
+  // --- AUTHENTICATION HANDLERS ---
+  const handleSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    const existing = users.find((u) => u.handle.toLowerCase() === loginHandle.toLowerCase() || u.email.toLowerCase() === loginEmail.toLowerCase());
+    if (existing) {
+      setCurrentUser(existing);
+      setEditHandle(existing.handle);
+    } else {
+      // Create guest member on the fly
+      const created: UserProfile = {
+        id: `user-${Date.now()}`,
+        handle: loginHandle || "DiscreteMember",
+        email: loginEmail || "user@rlgl.app",
+        subscriptionActive: true,
+        role: "MEMBER",
+      };
+      setUsers([created, ...users]);
+      setCurrentUser(created);
+      setEditHandle(created.handle);
+    }
+  };
+
+  const handleSignUp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ageVerified) {
+      alert("You must confirm you are 18 years of age or older to register.");
+      return;
+    }
+    const created: UserProfile = {
+      id: `user-${Date.now()}`,
+      handle: loginHandle || "NewMember",
+      email: loginEmail || "member@rlgl.app",
+      subscriptionActive: true,
+      role: "MEMBER",
+    };
+    setUsers([created, ...users]);
+    setCurrentUser(created);
+    setEditHandle(created.handle);
+  };
+
+  const handleSignOut = () => {
+    setCurrentUser(null);
+    setLoginHandle("");
+    setLoginEmail("");
+  };
+
+  const handleSelfDeleteAccount = () => {
+    if (confirm("Are you sure you want to permanently delete your account and all associated booth presence logs?")) {
+      if (currentUser) {
+        setUsers(users.filter((u) => u.id !== currentUser.id));
+        setReservations(reservations.filter((r) => r.userId !== currentUser.id));
+        handleSignOut();
+      }
+    }
+  };
+
+  const handleUpdateSelfHandle = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentUser && editHandle) {
+      const updated = { ...currentUser, handle: editHandle };
+      setCurrentUser(updated);
+      setUsers(users.map((u) => (u.id === currentUser.id ? updated : u)));
+      alert("Handle updated successfully!");
+    }
+  };
+
+  // --- LANDING PAGE / SIGN IN GATE ---
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between">
+        <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 via-rose-500 to-amber-500 p-0.5 flex items-center justify-center">
+              <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center">
+                <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold tracking-wider bg-gradient-to-r from-emerald-400 via-rose-400 to-amber-400 bg-clip-text text-transparent">
+                RED LIGHT, GREEN LIGHT
+              </h1>
+              <p className="text-xs text-slate-400">Discrete Real-Time Booth Matchmaker</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setPanicMode(true)}
+            className="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800/50 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition"
+          >
+            <Shield className="w-3.5 h-3.5 text-rose-400" />
+            <span>Panic Hide</span>
+          </button>
+        </header>
+
+        {/* Hero Section */}
+        <main className="max-w-4xl mx-auto px-6 py-12 text-center space-y-8">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-semibold">
+            <Lock className="w-3.5 h-3.5" />
+            <span>100% Anonymous & Geofenced Privacy</span>
+          </div>
+
+          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-100">
+            Know Who's There <br />
+            <span className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+              Before You Arrive.
+            </span>
+          </h2>
+
+          <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            Red Light, Green Light is the private membership platform for patrons of discrete entertainment venues. Broadcast presence timeslots, check live booth availability, and coordinate 1-on-1 meetups with complete anonymity.
+          </p>
+
+          {/* Auth Modal Container */}
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-md mx-auto shadow-2xl space-y-4 text-left">
+            <div className="flex border-b border-slate-800 pb-3">
+              <button
+                onClick={() => setAuthMode("signin")}
+                className={`flex-1 text-center py-2 text-xs font-bold transition ${
+                  authMode === "signin" ? "text-emerald-400 border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => setAuthMode("signup")}
+                className={`flex-1 text-center py-2 text-xs font-bold transition ${
+                  authMode === "signup" ? "text-emerald-400 border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                Create Account ($5/mo)
+              </button>
+            </div>
+
+            <form onSubmit={authMode === "signin" ? handleSignIn : handleSignUp} className="space-y-4 pt-2">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Discrete Member Handle</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. NeonKnight99"
+                  value={loginHandle}
+                  onChange={(e) => setLoginHandle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Discrete Email / Login</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. member@proton.me"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {authMode === "signup" && (
+                <div className="flex items-center space-x-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="age"
+                    checked={ageVerified}
+                    onChange={(e) => setAgeVerified(e.target.checked)}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="age" className="text-xs text-slate-400">
+                    I confirm I am 18 years of age or older.
+                  </label>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-slate-950 font-extrabold rounded-lg text-xs transition shadow-lg shadow-emerald-950/40"
+              >
+                {authMode === "signin" ? "Sign In & Enter Dashboard" : "Start $5/mo Membership"}
+              </button>
+            </form>
+
+            <div className="pt-2 text-center text-[11px] text-slate-500">
+              Demo Access: Enter any handle or email to sign in immediately.
+            </div>
+          </div>
+        </main>
+
+        <footer className="border-t border-slate-800/60 py-4 text-center text-xs text-slate-500">
+          Red Light, Green Light Platform &copy; 2026 — Private Discrete Membership SaaS.
+        </footer>
+      </div>
+    );
+  }
+
+  // --- DASHBOARD FOR AUTHENTICATED USER ---
+  const selectedVenue = venues.find((v) => v.id === selectedVenueId) || venues[0];
   const filteredReservations = reservations.filter(
     (r) => r.venueId === selectedVenueId && (searchQuery === "" || r.userHandle.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -58,26 +286,64 @@ export default function Dashboard() {
     (u) => adminSearch === "" || u.handle.toLowerCase().includes(adminSearch.toLowerCase()) || u.email.toLowerCase().includes(adminSearch.toLowerCase())
   );
 
-  const toggleUserSubscription = (userId: string) => {
-    setUsers(users.map((u) => (u.id === userId ? { ...u, subscriptionActive: !u.subscriptionActive } : u)));
+  // Admin Actions
+  const handleAdminAddUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminHandle || !newAdminEmail) return;
+    const created: UserProfile = {
+      id: `user-${Date.now()}`,
+      handle: newAdminHandle,
+      email: newAdminEmail,
+      subscriptionActive: true,
+      role: newAdminRole,
+    };
+    setUsers([created, ...users]);
+    setShowAddUserModal(false);
+    setNewAdminHandle("");
+    setNewAdminEmail("");
   };
 
-  const toggleUserRole = (userId: string) => {
-    setUsers(users.map((u) => {
-      if (u.id === userId) {
-        const nextRole = u.role === "MEMBER" ? "PREMIUM" : u.role === "PREMIUM" ? "ADMIN" : "MEMBER";
-        return { ...u, role: nextRole };
-      }
-      return u;
-    }));
+  const handleAdminDeleteUser = (userId: string) => {
+    if (confirm("Permanently delete this user and their reservations?")) {
+      setUsers(users.filter((u) => u.id !== userId));
+      setReservations(reservations.filter((r) => r.userId !== userId));
+    }
+  };
+
+  const handleAdminAddVenue = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVenueName || !newVenueAddress) return;
+    const created: Venue = {
+      id: `venue-${Date.now()}`,
+      name: newVenueName,
+      address: newVenueAddress,
+      latitude: 42.1000,
+      longitude: -76.9000,
+      boothCount: newVenueBooths,
+      activeReservationsCount: 0,
+    };
+    setVenues([...venues, created]);
+    setShowAddVenueModal(false);
+    setNewVenueName("");
+    setNewVenueAddress("");
+  };
+
+  const handleAdminDeleteVenue = (venueId: string) => {
+    if (confirm("Permanently delete this venue listing?")) {
+      setVenues(venues.filter((v) => v.id !== venueId));
+    }
+  };
+
+  const toggleUserSubscription = (userId: string) => {
+    setUsers(users.map((u) => (u.id === userId ? { ...u, subscriptionActive: !u.subscriptionActive } : u)));
   };
 
   const handleCreateReservation = (e: React.FormEvent) => {
     e.preventDefault();
     const created: BoothReservation = {
       id: `res-${Date.now()}`,
-      userId: "user-admin",
-      userHandle: "CaptainChuck (You)",
+      userId: currentUser.id,
+      userHandle: currentUser.handle,
       venueId: selectedVenueId,
       venueName: selectedVenue.name,
       boothNumber: newBooth,
@@ -91,6 +357,17 @@ export default function Dashboard() {
     setReservations([created, ...reservations]);
     setActiveTab("booths");
     setNewNote("");
+  };
+
+  const handleSendChatMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!messagingTarget || !chatMessage) return;
+    const history = chatHistory[messagingTarget] || [];
+    setChatMessageHistory({
+      ...chatHistory,
+      [messagingTarget]: [...history, `You: ${chatMessage}`],
+    });
+    setChatMessage("");
   };
 
   // FinOps Stats Calculation
@@ -120,20 +397,29 @@ export default function Dashboard() {
           <button
             onClick={() => setPanicMode(true)}
             className="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800/50 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition"
-            title="Instant Hide Screen"
           >
             <Shield className="w-3.5 h-3.5 text-rose-400" />
             <span>Panic Hide</span>
           </button>
 
-          {/* User Badge */}
-          <div className="hidden sm:flex items-center space-x-2 bg-slate-800/60 border border-slate-700/50 px-3 py-1.5 rounded-full text-xs">
+          {/* User Badge & Sign Out */}
+          <div className="flex items-center space-x-2 bg-slate-800/60 border border-slate-700/50 px-3 py-1.5 rounded-full text-xs">
             <User className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="font-semibold text-slate-200">CaptainChuck</span>
-            <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded-full border border-amber-500/30">
-              SYSTEM ADMIN
+            <span className="font-semibold text-slate-200">{currentUser.handle}</span>
+            <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full border ${
+              currentUser.role === "ADMIN" ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+            }`}>
+              {currentUser.role}
             </span>
           </div>
+
+          <button
+            onClick={handleSignOut}
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-lg border border-slate-700 transition"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
@@ -148,8 +434,9 @@ export default function Dashboard() {
             </h2>
 
             <div className="space-y-2">
-              {MOCK_VENUES.map((venue) => {
+              {venues.map((venue) => {
                 const isSelected = venue.id === selectedVenueId;
+                const activeCount = reservations.filter((r) => r.venueId === venue.id).length;
                 return (
                   <button
                     key={venue.id}
@@ -166,7 +453,7 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right">
                       <span className="inline-block px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full border border-emerald-500/20">
-                        {venue.activeReservationsCount} Active
+                        {activeCount} Active
                       </span>
                     </div>
                   </button>
@@ -197,14 +484,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Right Column: Interactive Booths, Timeslot Form & Admin Portal */}
+        {/* Right Column: Interactive Booths, Timeslot Form, Profile & Admin Portal */}
         <div className="lg:col-span-8 space-y-4">
           {/* Action Navigation Tabs */}
-          <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-xl flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-xl flex items-center justify-between overflow-x-auto">
             <div className="flex space-x-1">
               <button
                 onClick={() => setActiveTab("booths")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${
                   activeTab === "booths" ? "bg-slate-800 text-emerald-400 border border-emerald-500/30" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -212,24 +499,35 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={() => setActiveTab("new_reservation")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${
                   activeTab === "new_reservation" ? "bg-slate-800 text-emerald-400 border border-emerald-500/30" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 + Post Timeslot
               </button>
               <button
-                onClick={() => setActiveTab("admin")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
-                  activeTab === "admin" ? "bg-slate-800 text-amber-400 border border-amber-500/30" : "text-amber-400/70 hover:text-amber-300"
+                onClick={() => setActiveTab("profile")}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+                  activeTab === "profile" ? "bg-slate-800 text-teal-400 border border-teal-500/30" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Admin Portal</span>
+                Account Settings
               </button>
+
+              {currentUser.role === "ADMIN" && (
+                <button
+                  onClick={() => setActiveTab("admin")}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1 whitespace-nowrap ${
+                    activeTab === "admin" ? "bg-slate-800 text-amber-400 border border-amber-500/30" : "text-amber-400/70 hover:text-amber-300"
+                  }`}
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Admin Portal</span>
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center space-x-2 px-2">
+            <div className="hidden sm:flex items-center space-x-2 px-2">
               <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" />
               <span className="text-[11px] text-slate-500 font-mono">Live Sync</span>
             </div>
@@ -314,8 +612,11 @@ export default function Dashboard() {
                       )}
 
                       <div className="flex justify-end pt-1">
-                        <button className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-lg text-xs font-bold transition flex items-center space-x-1">
-                          <Eye className="w-3.5 h-3.5" />
+                        <button
+                          onClick={() => setMessagingTarget(res.userHandle)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
                           <span>Send Discrete Message</span>
                         </button>
                       </div>
@@ -403,88 +704,343 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Admin Account Management Portal */}
-          {activeTab === "admin" && (
+          {/* Self-Service Profile Settings Tab */}
+          {activeTab === "profile" && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
+              <h3 className="text-sm font-bold text-slate-100 flex items-center space-x-2">
+                <User className="w-4 h-4 text-emerald-400" />
+                <span>Self-Service Account & Membership Settings</span>
+              </h3>
+
+              <form onSubmit={handleUpdateSelfHandle} className="space-y-4 border-b border-slate-800 pb-6">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Discrete Member Handle</label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      required
+                      value={editHandle}
+                      onChange={(e) => setEditHandle(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs transition"
+                    >
+                      Update Handle
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-bold uppercase text-rose-400">Danger Zone</h4>
+                <p className="text-xs text-slate-400">
+                  Permanently delete your account, cancel your subscription, and wipe all associated booth logs.
+                </p>
+                <button
+                  onClick={handleSelfDeleteAccount}
+                  className="px-4 py-2.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800/50 rounded-lg text-xs font-bold transition flex items-center space-x-2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete My Account Permanently</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Admin Account & Venue CRUD Portal */}
+          {activeTab === "admin" && currentUser.role === "ADMIN" && (
             <div className="bg-slate-900 border border-amber-500/30 rounded-xl p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center space-x-2">
                   <Shield className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-base font-extrabold text-slate-100">RLGL Admin User & Membership Console</h3>
+                  <h3 className="text-base font-extrabold text-slate-100">RLGL Admin CRUD Console</h3>
                 </div>
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Filter user or email..."
-                    value={adminSearch}
-                    onChange={(e) => setAdminSearch(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                  />
+
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setAdminView("users")}
+                    className={`px-3 py-1 rounded text-xs font-bold transition ${
+                      adminView === "users" ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Users CRUD ({users.length})
+                  </button>
+                  <button
+                    onClick={() => setAdminView("venues")}
+                    className={`px-3 py-1 rounded text-xs font-bold transition ${
+                      adminView === "venues" ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Venues CRUD ({venues.length})
+                  </button>
                 </div>
               </div>
 
-              <p className="text-xs text-slate-400">
-                Manage user accounts, Stripe subscription statuses ($5/mo), and assign administrative privileges.
-              </p>
+              {/* Users CRUD View */}
+              {adminView === "users" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Filter user..."
+                        value={adminSearch}
+                        onChange={(e) => setAdminSearch(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase bg-slate-950/60">
-                      <th className="p-3">Handle</th>
-                      <th className="p-3">Discrete Email</th>
-                      <th className="p-3">Role</th>
-                      <th className="p-3">Subscription</th>
-                      <th className="p-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-xs">
-                    {filteredUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-slate-800/40 transition">
-                        <td className="p-3 font-bold text-slate-200">{user.handle}</td>
-                        <td className="p-3 font-mono text-slate-400">{user.email}</td>
-                        <td className="p-3">
+                    <button
+                      onClick={() => setShowAddUserModal(true)}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-lg text-xs transition flex items-center space-x-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Create User</span>
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase bg-slate-950/60">
+                          <th className="p-3">Handle</th>
+                          <th className="p-3">Email</th>
+                          <th className="p-3">Role</th>
+                          <th className="p-3">Subscription</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-xs">
+                        {filteredUsers.map((u) => (
+                          <tr key={u.id} className="hover:bg-slate-800/40 transition">
+                            <td className="p-3 font-bold text-slate-200">{u.handle}</td>
+                            <td className="p-3 font-mono text-slate-400">{u.email}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded border bg-slate-800 text-amber-300 border-amber-500/30">
+                                {u.role}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {u.subscriptionActive ? (
+                                <span className="text-emerald-400 font-bold">Active ($5/mo)</span>
+                              ) : (
+                                <span className="text-rose-400 font-bold">Canceled</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right space-x-2">
+                              <button
+                                onClick={() => toggleUserSubscription(u.id)}
+                                className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[11px] font-bold"
+                              >
+                                Toggle Sub
+                              </button>
+                              <button
+                                onClick={() => handleAdminDeleteUser(u.id)}
+                                className="p-1 text-rose-400 hover:bg-rose-950/60 rounded"
+                                title="Delete User"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Venues CRUD View */}
+              {adminView === "venues" && (
+                <div className="space-y-4">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setShowAddVenueModal(true)}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-lg text-xs transition flex items-center space-x-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Venue Listing</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {venues.map((v) => (
+                      <div key={v.id} className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-200">{v.name}</h4>
+                            <p className="text-xs text-slate-400">{v.address}</p>
+                          </div>
                           <button
-                            onClick={() => toggleUserRole(user.id)}
-                            className="px-2 py-0.5 text-[10px] font-bold rounded border bg-slate-800 text-amber-300 border-amber-500/30 hover:border-amber-400 transition"
+                            onClick={() => handleAdminDeleteVenue(v.id)}
+                            className="p-1 text-rose-400 hover:bg-rose-950/60 rounded"
                           >
-                            {user.role}
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </td>
-                        <td className="p-3">
-                          {user.subscriptionActive ? (
-                            <span className="inline-flex items-center space-x-1 text-emerald-400 font-bold">
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              <span>Active ($5/mo)</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center space-x-1 text-rose-400 font-bold">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              <span>Inactive / Canceled</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            onClick={() => toggleUserSubscription(user.id)}
-                            className={`px-3 py-1 rounded text-xs font-bold transition border ${
-                              user.subscriptionActive
-                                ? "bg-rose-950/60 text-rose-300 border-rose-800/50 hover:bg-rose-900"
-                                : "bg-emerald-950/60 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900"
-                            }`}
-                          >
-                            {user.subscriptionActive ? "Cancel Sub" : "Activate $5/mo"}
-                          </button>
-                        </td>
-                      </tr>
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono">
+                          Booths: {v.boothCount} | Lat/Lng: {v.latitude.toFixed(2)}, {v.longitude.toFixed(2)}
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       </main>
+
+      {/* Admin Add User Modal */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl max-w-md w-full space-y-4">
+            <h3 className="text-sm font-bold text-slate-100">Create New Member Account</h3>
+            <form onSubmit={handleAdminAddUser} className="space-y-3">
+              <input
+                type="text"
+                placeholder="Handle (e.g. NeonViper)"
+                value={newAdminHandle}
+                onChange={(e) => setNewAdminHandle(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200"
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email (e.g. viper@anon.com)"
+                value={newAdminEmail}
+                onChange={(e) => setNewAdminEmail(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200"
+                required
+              />
+              <select
+                value={newAdminRole}
+                onChange={(e) => setNewAdminRole(e.target.value as "MEMBER" | "PREMIUM" | "ADMIN")}
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200"
+              >
+                <option value="MEMBER">MEMBER</option>
+                <option value="PREMIUM">PREMIUM</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-400 rounded text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-amber-500 text-slate-950 font-bold rounded text-xs"
+                >
+                  Save User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Add Venue Modal */}
+      {showAddVenueModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl max-w-md w-full space-y-4">
+            <h3 className="text-sm font-bold text-slate-100">Add New Venue Listing</h3>
+            <form onSubmit={handleAdminAddVenue} className="space-y-3">
+              <input
+                type="text"
+                placeholder="Venue Name (e.g. Adult World - Syracuse)"
+                value={newVenueName}
+                onChange={(e) => setNewVenueName(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Full Address"
+                value={newVenueAddress}
+                onChange={(e) => setNewVenueAddress(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200"
+                required
+              />
+              <input
+                type="number"
+                placeholder="Booth Count"
+                value={newVenueBooths}
+                onChange={(e) => setNewVenueBooths(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200"
+                required
+              />
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddVenueModal(false)}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-400 rounded text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-amber-500 text-slate-950 font-bold rounded text-xs"
+                >
+                  Save Venue
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Messaging Modal */}
+      {messagingTarget && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl max-w-md w-full space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+              <h3 className="text-sm font-bold text-slate-100">Discrete Chat w/ {messagingTarget}</h3>
+              <button
+                onClick={() => setMessagingTarget(null)}
+                className="text-slate-500 hover:text-slate-200 text-xs font-bold"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 h-40 overflow-y-auto space-y-2 text-xs">
+              {(chatHistory[messagingTarget] || []).length === 0 ? (
+                <div className="text-slate-500 italic text-center pt-12">
+                  No messages exchanged yet. Send a discrete greeting!
+                </div>
+              ) : (
+                (chatHistory[messagingTarget] || []).map((msg, i) => (
+                  <div key={i} className="bg-slate-900 p-2 rounded border border-slate-800 text-emerald-300">
+                    {msg}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <form onSubmit={handleSendChatMessage} className="flex space-x-2">
+              <input
+                type="text"
+                placeholder="Type discrete message..."
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded text-xs"
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
