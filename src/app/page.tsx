@@ -240,7 +240,7 @@ export default function Application() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. chuck"
+                  placeholder="e.g. NeonKnight99"
                   value={loginHandle}
                   onChange={(e) => setLoginHandle(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -252,7 +252,7 @@ export default function Application() {
                 <input
                   type="email"
                   required
-                  placeholder="e.g. chuck.forsyth@gmail.com"
+                  placeholder="e.g. member@proton.me"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -281,10 +281,6 @@ export default function Application() {
                 {authMode === "signin" ? "Sign In & Enter Dashboard" : "Start $5/mo Membership"}
               </button>
             </form>
-
-            <div className="pt-2 text-center text-[11px] text-slate-500">
-              Admin Login: Handle <strong className="text-amber-400">chuck</strong> or email <strong className="text-amber-400">chuck.forsyth@gmail.com</strong>
-            </div>
           </div>
         </main>
 
