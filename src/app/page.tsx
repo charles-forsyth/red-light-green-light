@@ -425,7 +425,7 @@ export default function Application() {
 
       {/* Main Content Body */}
       <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Venue Selector & Quick Stats */}
+        {/* Left Column: Venue Selector */}
         <div className="lg:col-span-4 space-y-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
@@ -462,24 +462,21 @@ export default function Application() {
             </div>
           </div>
 
-          {/* Admin FinOps Stats Card */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/30 rounded-xl p-4 relative overflow-hidden shadow-lg">
+          {/* Membership Info Card */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-xl p-4 relative overflow-hidden shadow-lg">
             <div className="absolute top-0 right-0 p-3 opacity-10">
-              <DollarSign className="w-24 h-24 text-emerald-500" />
+              <Lock className="w-24 h-24 text-emerald-500" />
             </div>
-            <h3 className="text-sm font-bold text-emerald-300 flex items-center space-x-2">
-              <CreditCard className="w-4 h-4 text-emerald-400" />
-              <span>SaaS Revenue & MRR Stats</span>
+            <h3 className="text-sm font-bold text-slate-200 flex items-center space-x-2">
+              <Lock className="w-4 h-4 text-emerald-400" />
+              <span>Discrete Membership Active</span>
             </h3>
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase font-bold block">Active Subscriptions</span>
-                <span className="text-lg font-extrabold text-emerald-400">{activeSubs} Members</span>
-              </div>
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase font-bold block">Monthly Recurring (MRR)</span>
-                <span className="text-lg font-extrabold text-amber-400">${mrr.toFixed(2)}/mo</span>
-              </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Your $5/mo membership gives you unlimited venue reservations, discrete direct messaging, and live presence updates.
+            </p>
+            <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+              <span className="text-emerald-400 font-semibold">Status: Verified Member</span>
+              <span className="text-slate-500">Auto-renews Sep 27</span>
             </div>
           </div>
         </div>
@@ -775,6 +772,18 @@ export default function Application() {
                   >
                     Venues CRUD ({venues.length})
                   </button>
+                </div>
+              </div>
+
+              {/* Admin FinOps Banner Inside Admin Portal Only */}
+              <div className="bg-gradient-to-br from-slate-950 to-slate-900 border border-emerald-500/30 p-3 rounded-lg flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-slate-400 font-bold uppercase block text-[10px]">Financial Overview</span>
+                  <span className="text-emerald-400 font-extrabold text-sm">{activeSubs} Active Members</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-400 font-bold uppercase block text-[10px]">Monthly Recurring (MRR)</span>
+                  <span className="text-amber-400 font-extrabold text-sm">${mrr.toFixed(2)}/mo</span>
                 </div>
               </div>
 
