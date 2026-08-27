@@ -3,17 +3,22 @@
 import React, { useState } from "react";
 import {
   Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users,
-  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock
+  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock, Inbox, Send
 } from "lucide-react";
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
 import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile, Venue } from "@/types";
 
 const INITIAL_USERS: UserProfile[] = [
+  { id: "user-admin-chuck", handle: "chuck", email: "chuck.forsyth@gmail.com", subscriptionActive: true, role: "ADMIN" },
   { id: "user-101", handle: "NeonKnight99", email: "neon99@proton.me", subscriptionActive: true, role: "PREMIUM" },
   { id: "user-102", handle: "MidnightRider", email: "rider@anonmail.com", subscriptionActive: true, role: "PREMIUM" },
   { id: "user-103", handle: "ShadowWalker", email: "shadow@tempmail.io", subscriptionActive: true, role: "MEMBER" },
   { id: "user-104", handle: "CrimsonViper", email: "viper@secure.net", subscriptionActive: false, role: "MEMBER" },
-  { id: "user-admin", handle: "CaptainChuck", email: "admin@rlgl.app", subscriptionActive: true, role: "ADMIN" },
+];
+
+const INITIAL_MESSAGES = [
+  { id: "msg-1", senderHandle: "NeonKnight99", receiverHandle: "chuck", content: "Hey Chuck! Are you over at Lawrenceville in Booth #4 right now?", createdAt: new Date(Date.now() - 20 * 60000).toISOString(), read: false },
+  { id: "msg-2", senderHandle: "MidnightRider", receiverHandle: "chuck", content: "Arriving at Painted Post around 11:30 AM if you want to watch videos.", createdAt: new Date(Date.now() - 5 * 60000).toISOString(), read: false },
 ];
 
 export default function Application() {
@@ -27,7 +32,7 @@ export default function Application() {
   // App Core State
   const [venues, setVenues] = useState<Venue[]>(MOCK_VENUES);
   const [selectedVenueId, setSelectedVenueId] = useState<string>("venue-lawrenceville");
-  const [activeTab, setActiveTab] = useState<"booths" | "map" | "new_reservation" | "profile" | "admin">("booths");
+  const [activeTab, setActiveTab] = useState<"booths" | "map" | "new_reservation" | "inbox" | "profile" | "admin">("booths");
   const [searchQuery, setSearchQuery] = useState("");
   const [panicMode, setPanicMode] = useState(false);
 
@@ -44,7 +49,7 @@ export default function Application() {
   const [adminSearch, setAdminSearch] = useState("");
   const [adminView, setAdminView] = useState<"users" | "venues">("users");
 
-  // Admin Modal / New User / New Venue Form State
+  // Admin Modal Form State
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newAdminHandle, setNewAdminHandle] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
@@ -55,10 +60,10 @@ export default function Application() {
   const [newVenueAddress, setNewVenueAddress] = useState("");
   const [newVenueBooths, setNewVenueBooths] = useState(12);
 
-  // Messaging Modal State
+  // Direct Messaging State
   const [messagingTarget, setMessagingTarget] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState("");
-  const [chatHistory, setChatMessageHistory] = useState<Record<string, string[]>>({});
+  const [allMessages, setAllMessages] = useState(INITIAL_MESSAGES);
 
   // Self-Service Profile State
   const [editHandle, setEditHandle] = useState("");
@@ -86,6 +91,14 @@ export default function Application() {
   // --- AUTHENTICATION HANDLERS ---
   const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
+    // Enforce Sole Admin Rule: chuck / chuck.forsyth@gmail.com
+    if (loginHandle.toLowerCase() === "chuck" || loginEmail.toLowerCase() === "chuck.forsyth@gmail.com") {
+      const adminAcc = users.find((u) => u.id === "user-admin-chuck") || INITIAL_USERS[0];
+      setCurrentUser(adminAcc);
+      setEditHandle(adminAcc.handle);
+      return;
+    }
+
     const existing = users.find((u) => u.handle.toLowerCase() === loginHandle.toLowerCase() || u.email.toLowerCase() === loginEmail.toLowerCase());
     if (existing) {
       setCurrentUser(existing);
@@ -110,12 +123,18 @@ export default function Application() {
       alert("You must confirm you are 18 years of age or older to register.");
       return;
     }
+
+    let assignedRole: "MEMBER" | "PREMIUM" | "ADMIN" = "MEMBER";
+    if (loginHandle.toLowerCase() === "chuck" || loginEmail.toLowerCase() === "chuck.forsyth@gmail.com") {
+      assignedRole = "ADMIN";
+    }
+
     const created: UserProfile = {
       id: `user-${Date.now()}`,
       handle: loginHandle || "NewMember",
       email: loginEmail || "member@rlgl.app",
       subscriptionActive: true,
-      role: "MEMBER",
+      role: assignedRole,
     };
     setUsers([created, ...users]);
     setCurrentUser(created);
@@ -221,7 +240,7 @@ export default function Application() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. NeonKnight99"
+                  placeholder="e.g. chuck"
                   value={loginHandle}
                   onChange={(e) => setLoginHandle(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -233,7 +252,7 @@ export default function Application() {
                 <input
                   type="email"
                   required
-                  placeholder="e.g. member@proton.me"
+                  placeholder="e.g. chuck.forsyth@gmail.com"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -264,7 +283,7 @@ export default function Application() {
             </form>
 
             <div className="pt-2 text-center text-[11px] text-slate-500">
-              Demo Access: Enter any handle or email to sign in immediately.
+              Admin Login: Handle <strong className="text-amber-400">chuck</strong> or email <strong className="text-amber-400">chuck.forsyth@gmail.com</strong>
             </div>
           </div>
         </main>
@@ -284,6 +303,11 @@ export default function Application() {
 
   const filteredUsers = users.filter(
     (u) => adminSearch === "" || u.handle.toLowerCase().includes(adminSearch.toLowerCase()) || u.email.toLowerCase().includes(adminSearch.toLowerCase())
+  );
+
+  // User Inbox Messages
+  const myInboxMessages = allMessages.filter(
+    (m) => m.receiverHandle.toLowerCase() === currentUser.handle.toLowerCase() || m.senderHandle.toLowerCase() === currentUser.handle.toLowerCase()
   );
 
   // Admin Actions
@@ -366,11 +390,17 @@ export default function Application() {
   const handleSendChatMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!messagingTarget || !chatMessage) return;
-    const history = chatHistory[messagingTarget] || [];
-    setChatMessageHistory({
-      ...chatHistory,
-      [messagingTarget]: [...history, `You: ${chatMessage}`],
-    });
+
+    const newMsg = {
+      id: `msg-${Date.now()}`,
+      senderHandle: currentUser.handle,
+      receiverHandle: messagingTarget,
+      content: chatMessage,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+
+    setAllMessages([...allMessages, newMsg]);
     setChatMessage("");
   };
 
@@ -419,10 +449,11 @@ export default function Application() {
 
           <button
             onClick={handleSignOut}
-            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-lg border border-slate-700 transition"
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-100 rounded-lg border border-slate-700 text-xs font-bold transition flex items-center space-x-1"
             title="Sign Out"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span>Sign Out</span>
           </button>
         </div>
       </header>
@@ -485,7 +516,7 @@ export default function Application() {
           </div>
         </div>
 
-        {/* Right Column: Interactive Booths, Timeslot Form, Profile & Admin Portal */}
+        {/* Right Column: Interactive Booths, Timeslot Form, Inbox, Profile & Admin Portal */}
         <div className="lg:col-span-8 space-y-4">
           {/* Action Navigation Tabs */}
           <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-xl flex items-center justify-between overflow-x-auto">
@@ -507,15 +538,25 @@ export default function Application() {
                 + Post Timeslot
               </button>
               <button
+                onClick={() => setActiveTab("inbox")}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1 whitespace-nowrap ${
+                  activeTab === "inbox" ? "bg-slate-800 text-teal-400 border border-teal-500/30" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Inbox className="w-3.5 h-3.5" />
+                <span>Messages ({myInboxMessages.length})</span>
+              </button>
+              <button
                 onClick={() => setActiveTab("profile")}
                 className={`px-3 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${
-                  activeTab === "profile" ? "bg-slate-800 text-teal-400 border border-teal-500/30" : "text-slate-400 hover:text-slate-200"
+                  activeTab === "profile" ? "bg-slate-800 text-slate-200 border border-slate-700" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 Account Settings
               </button>
 
-              {currentUser.role === "ADMIN" && (
+              {/* Sole Admin Access Check: chuck / chuck.forsyth@gmail.com */}
+              {currentUser.role === "ADMIN" && (currentUser.handle.toLowerCase() === "chuck" || currentUser.email.toLowerCase() === "chuck.forsyth@gmail.com") && (
                 <button
                   onClick={() => setActiveTab("admin")}
                   className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1 whitespace-nowrap ${
@@ -717,6 +758,52 @@ export default function Application() {
             </div>
           )}
 
+          {/* User Messages Inbox Tab */}
+          {activeTab === "inbox" && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+              <h3 className="text-sm font-bold text-slate-100 flex items-center space-x-2">
+                <Inbox className="w-4 h-4 text-teal-400" />
+                <span>Discrete Messages Inbox ({myInboxMessages.length})</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                View, read, and reply to all discrete 1-on-1 messages sent to your account.
+              </p>
+
+              {myInboxMessages.length === 0 ? (
+                <div className="bg-slate-950 border border-slate-800 rounded-lg p-8 text-center text-slate-500 text-xs">
+                  Your inbox is currently empty. Direct messages sent from booth cards will appear here.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {myInboxMessages.map((msg) => (
+                    <div key={msg.id} className="bg-slate-950 border border-slate-800 p-3 rounded-lg space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-emerald-400">
+                          From: {msg.senderHandle} ➔ To: {msg.receiverHandle}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-200 bg-slate-900/80 p-2 rounded border border-slate-800">
+                        "{msg.content}"
+                      </p>
+                      <div className="flex justify-end pt-1">
+                        <button
+                          onClick={() => setMessagingTarget(msg.senderHandle === currentUser.handle ? msg.receiverHandle : msg.senderHandle)}
+                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded text-xs font-bold transition flex items-center space-x-1"
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>Reply</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Self-Service Profile Settings Tab */}
           {activeTab === "profile" && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
@@ -762,8 +849,8 @@ export default function Application() {
             </div>
           )}
 
-          {/* Admin Account & Venue CRUD Portal */}
-          {activeTab === "admin" && currentUser.role === "ADMIN" && (
+          {/* Admin Account & Venue CRUD Portal — Restricted Solely to chuck / chuck.forsyth@gmail.com */}
+          {activeTab === "admin" && currentUser.role === "ADMIN" && (currentUser.handle.toLowerCase() === "chuck" || currentUser.email.toLowerCase() === "chuck.forsyth@gmail.com") && (
             <div className="bg-slate-900 border border-amber-500/30 rounded-xl p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center space-x-2">
@@ -1035,14 +1122,23 @@ export default function Application() {
             </div>
 
             <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 h-40 overflow-y-auto space-y-2 text-xs">
-              {(chatHistory[messagingTarget] || []).length === 0 ? (
+              {(allMessages.filter(
+                (m) =>
+                  (m.senderHandle.toLowerCase() === currentUser.handle.toLowerCase() && m.receiverHandle.toLowerCase() === messagingTarget.toLowerCase()) ||
+                  (m.senderHandle.toLowerCase() === messagingTarget.toLowerCase() && m.receiverHandle.toLowerCase() === currentUser.handle.toLowerCase())
+              ) || []).length === 0 ? (
                 <div className="text-slate-500 italic text-center pt-12">
                   No messages exchanged yet. Send a discrete greeting!
                 </div>
               ) : (
-                (chatHistory[messagingTarget] || []).map((msg, i) => (
-                  <div key={i} className="bg-slate-900 p-2 rounded border border-slate-800 text-emerald-300">
-                    {msg}
+                (allMessages.filter(
+                  (m) =>
+                    (m.senderHandle.toLowerCase() === currentUser.handle.toLowerCase() && m.receiverHandle.toLowerCase() === messagingTarget.toLowerCase()) ||
+                    (m.senderHandle.toLowerCase() === messagingTarget.toLowerCase() && m.receiverHandle.toLowerCase() === currentUser.handle.toLowerCase())
+                ) || []).map((msg) => (
+                  <div key={msg.id} className="bg-slate-900 p-2 rounded border border-slate-800 text-emerald-300">
+                    <span className="font-bold text-amber-400 block text-[10px]">{msg.senderHandle}:</span>
+                    {msg.content}
                   </div>
                 ))
               )}
