@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import {
   Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users,
-  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key
+  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock
 } from "lucide-react";
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
 import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile, Venue } from "@/types";
@@ -34,7 +34,8 @@ export default function Application() {
   // Reservations State
   const [reservations, setReservations] = useState<BoothReservation[]>(MOCK_RESERVATIONS);
   const [newBooth, setNewBooth] = useState<number>(4);
-  const [newStatus, setNewStatus] = useState<VisibilityStatus>("GREEN_LIGHT");
+  const [newStartTime, setNewStartTime] = useState("11:00");
+  const [newEndTime, setNewEndTime] = useState("12:30");
   const [newPref, setNewPreference] = useState<PreferenceType>("HANGOUT");
   const [newNote, setNewNote] = useState("");
 
@@ -90,7 +91,6 @@ export default function Application() {
       setCurrentUser(existing);
       setEditHandle(existing.handle);
     } else {
-      // Create guest member on the fly
       const created: UserProfile = {
         id: `user-${Date.now()}`,
         handle: loginHandle || "DiscreteMember",
@@ -340,6 +340,10 @@ export default function Application() {
 
   const handleCreateReservation = (e: React.FormEvent) => {
     e.preventDefault();
+    const todayStr = new Date().toISOString().split("T")[0];
+    const startIso = new Date(`${todayStr}T${newStartTime}:00`).toISOString();
+    const endIso = new Date(`${todayStr}T${newEndTime}:00`).toISOString();
+
     const created: BoothReservation = {
       id: `res-${Date.now()}`,
       userId: currentUser.id,
@@ -347,11 +351,11 @@ export default function Application() {
       venueId: selectedVenueId,
       venueName: selectedVenue.name,
       boothNumber: newBooth,
-      startTime: new Date().toISOString(),
-      endTime: new Date(Date.now() + 60 * 60000).toISOString(),
-      status: newStatus,
+      startTime: startIso,
+      endTime: endIso,
+      status: "GREEN_LIGHT",
       preference: newPref,
-      note: newNote || "Present at booth, open to meet.",
+      note: newNote || "Present at booth during timeslot.",
     };
 
     setReservations([created, ...reservations]);
@@ -556,7 +560,7 @@ export default function Application() {
               ) : (
                 filteredReservations.map((res) => {
                   let statusColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
-                  let statusText = "Green Light — Available Now";
+                  let statusText = "Green Light — Active Timeslot";
                   if (res.status === "YELLOW_LIGHT") {
                     statusColor = "bg-amber-500/20 text-amber-300 border-amber-500/40";
                     statusText = "Yellow Light — Arriving Soon";
@@ -595,9 +599,12 @@ export default function Application() {
                           <span className="text-amber-400 font-semibold">{prefLabel}</span>
                         </div>
                         <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
-                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Active Timeslot</span>
-                          <span className="text-slate-300 font-mono">
-                            {new Date(res.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(res.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Active Timeslot Window</span>
+                          <span className="text-slate-300 font-mono flex items-center space-x-1 mt-0.5">
+                            <Clock className="w-3 h-3 text-emerald-400" />
+                            <span>
+                              {new Date(res.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(res.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </span>
                         </div>
                       </div>
@@ -624,19 +631,19 @@ export default function Application() {
             </div>
           )}
 
-          {/* New Reservation Form */}
+          {/* New Reservation Form with Explicit Start / End Times */}
           {activeTab === "new_reservation" && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
               <h3 className="text-sm font-bold text-slate-100 flex items-center space-x-2">
-                <Radio className="w-4 h-4 text-emerald-400" />
-                <span>Post Presence / Reserve Booth Timeslot</span>
+                <Clock className="w-4 h-4 text-emerald-400" />
+                <span>Post Timeslot & Booth Window</span>
               </h3>
               <p className="text-xs text-slate-400">
-                Post your availability at <strong className="text-emerald-400">{selectedVenue.name}</strong> so other members know when you will be there.
+                Specify your exact arrival and departure times at <strong className="text-emerald-400">{selectedVenue.name}</strong>.
               </p>
 
               <form onSubmit={handleCreateReservation} className="space-y-4 pt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Booth Number (Optional)</label>
                     <input
@@ -650,16 +657,25 @@ export default function Application() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Light Status</label>
-                    <select
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value as VisibilityStatus)}
+                    <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      required
+                      value={newStartTime}
+                      onChange={(e) => setNewStartTime(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="GREEN_LIGHT">Green Light — Available Now</option>
-                      <option value="YELLOW_LIGHT">Yellow Light — Arriving Soon</option>
-                      <option value="RED_LIGHT">Red Light — Occupied / Busy</option>
-                    </select>
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-400 mb-1">End Time</label>
+                    <input
+                      type="time"
+                      required
+                      value={newEndTime}
+                      onChange={(e) => setNewEndTime(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                    />
                   </div>
                 </div>
 
