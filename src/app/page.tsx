@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
   Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users,
-  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock, Inbox, Send, Server
+  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock, Inbox, Send, Server, CheckCircle2, XCircle
 } from "lucide-react";
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
 import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile, Venue } from "@/types";
@@ -77,7 +77,7 @@ export default function Application() {
   // Self-Service Profile State
   const [editHandle, setEditHandle] = useState("");
 
-  // REAL-TIME WEBSOCKET/POLLING PRESENCE REFRESH (EVERY 5 SECONDS)
+  // REAL-TIME WEBSOCKET/POLLING PRESENCE REFRESH & AUTO-EXPIRE (EVERY 5 SECONDS)
   useEffect(() => {
     fetchLiveReservations();
     fetchLiveUsers();
@@ -87,7 +87,7 @@ export default function Application() {
       if (currentUser) {
         fetchUserMessages();
       }
-    }, 5000); // 5s Real-Time Sync
+    }, 5000); // 5s Real-Time Sync & Auto-Expire
 
     return () => clearInterval(interval);
   }, [selectedVenueId, currentUser]);
@@ -142,6 +142,50 @@ export default function Application() {
       </div>
     );
   }
+
+  // --- INSTANT ON-SITE CHECK IN & CHECK OUT HANDLERS ---
+  const handleInstantCheckIn = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch("/api/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "checkin",
+          userId: currentUser.id,
+          venueId: selectedVenueId,
+          boothNumber: newBooth,
+          preference: newPref,
+          note: "Checked in on-site right now (1-hr window).",
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.reservation) {
+        setReservations([data.reservation, ...reservations]);
+        setActiveTab("booths");
+        return;
+      }
+    } catch (e) {
+      console.error("Instant check-in fallback");
+    }
+  };
+
+  const handleInstantCheckOut = async () => {
+    if (!currentUser) return;
+    try {
+      await fetch("/api/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "checkout",
+          userId: currentUser.id,
+        }),
+      });
+      setReservations(reservations.filter((r) => r.userId !== currentUser.id));
+    } catch (e) {
+      console.error("Instant check-out fallback");
+    }
+  };
 
   // --- STRICT AUTHENTICATION API HANDLERS ---
   const handleSignIn = async (e: React.FormEvent) => {
@@ -413,6 +457,9 @@ export default function Application() {
     (m) => m.receiverHandle.toLowerCase() === currentUser.handle.toLowerCase() || m.senderHandle.toLowerCase() === currentUser.handle.toLowerCase()
   );
 
+  // User Active Presence Check
+  const myActivePresence = reservations.find((r) => r.userId === currentUser.id && r.venueId === selectedVenueId);
+
   // Admin Actions
   const handleAdminAddUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -534,18 +581,6 @@ export default function Application() {
         return;
       }
     } catch (e) {}
-
-    const newMsg = {
-      id: `msg-${Date.now()}`,
-      senderHandle: currentUser.handle,
-      receiverHandle: messagingTarget,
-      content: chatMessage,
-      createdAt: new Date().toISOString(),
-      read: false,
-    };
-
-    setAllMessages([...allMessages, newMsg]);
-    setChatMessage("");
   };
 
   // FinOps Stats Calculation
@@ -569,7 +604,7 @@ export default function Application() {
             <p className="text-xs text-slate-400 flex items-center space-x-1">
               <span>Discrete Real-Time Booth Matchmaker</span>
               <span className="text-emerald-400 font-mono text-[10px] px-1.5 py-0.2 bg-emerald-950 rounded border border-emerald-800">
-                PostgreSQL & Realtime Active
+                Auto-Expire & Instant Check-In Active
               </span>
             </p>
           </div>
@@ -609,8 +644,42 @@ export default function Application() {
 
       {/* Main Content Body */}
       <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Venue Selector */}
+        {/* Left Column: Venue Selector & Instant On-Site Actions */}
         <div className="lg:col-span-4 space-y-4">
+          {/* On-Site Instant Action Card */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/40 p-4 rounded-xl space-y-3 shadow-xl">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center space-x-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>On-Site Instant Check-In</span>
+            </h3>
+
+            {myActivePresence ? (
+              <div className="space-y-2 bg-emerald-950/40 border border-emerald-500/30 p-3 rounded-lg text-xs">
+                <div className="text-emerald-300 font-bold flex items-center justify-between">
+                  <span>Currently Checked In</span>
+                  <span className="animate-ping w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div className="text-slate-300">{selectedVenue.name}</div>
+                <button
+                  onClick={handleInstantCheckOut}
+                  className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-slate-100 font-extrabold rounded text-xs transition flex items-center justify-center space-x-1 mt-1 shadow"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>CHECK OUT NOW</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleInstantCheckIn}
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-extrabold rounded-lg text-xs transition shadow-lg shadow-emerald-950/50 flex items-center justify-center space-x-2"
+              >
+                <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                <span>CHECK IN NOW (1-HR WINDOW)</span>
+              </button>
+            )}
+          </div>
+
+          {/* Venue List */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
               <span>Select Venue</span>
@@ -643,24 +712,6 @@ export default function Application() {
                   </button>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Membership Info Card */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-xl p-4 relative overflow-hidden shadow-lg">
-            <div className="absolute top-0 right-0 p-3 opacity-10">
-              <Lock className="w-24 h-24 text-emerald-500" />
-            </div>
-            <h3 className="text-sm font-bold text-slate-200 flex items-center space-x-2">
-              <Lock className="w-4 h-4 text-emerald-400" />
-              <span>Discrete Membership Active</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Your $5/mo membership gives you unlimited venue reservations, discrete direct messaging, and live presence updates.
-            </p>
-            <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-              <span className="text-emerald-400 font-semibold">Status: Verified Member</span>
-              <span className="text-slate-500">Auto-renews Sep 27</span>
             </div>
           </div>
         </div>
@@ -729,7 +780,7 @@ export default function Application() {
 
             <div className="hidden sm:flex items-center space-x-2 px-2">
               <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-              <span className="text-[11px] text-emerald-400 font-mono">Real-Time Sync</span>
+              <span className="text-[11px] text-emerald-400 font-mono">Auto-Expire Active</span>
             </div>
           </div>
 
@@ -754,7 +805,7 @@ export default function Application() {
 
               {filteredReservations.length === 0 ? (
                 <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center text-slate-500 text-xs">
-                  No active presence posted at this venue right now. Be the first to post a timeslot!
+                  No active presence posted at this venue right now. Be the first to tap <strong className="text-emerald-400">CHECK IN NOW</strong>!
                 </div>
               ) : (
                 filteredReservations.map((res) => {
@@ -830,7 +881,7 @@ export default function Application() {
             </div>
           )}
 
-          {/* Interactive Geofenced Map Component (Opens ONLY when 'Interactive Map' button is clicked) */}
+          {/* Interactive Geofenced Map Component */}
           {activeTab === "map" && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-xl">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
