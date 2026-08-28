@@ -8,7 +8,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const venueId = searchParams.get("venueId");
 
-    // AUTO-EXPIRE PAST TIMESLOTS IN POSTGRESQL (Auto-clean expired presence)
+    // AUTO-EXPIRE PAST TIMESLOTS IN POSTGRESQL
     const now = new Date();
     await prisma.boothReservation.deleteMany({
       where: {
@@ -16,6 +16,7 @@ export async function GET(req: Request) {
       },
     });
 
+    // If venueId is provided, query that venue; otherwise query ALL active reservations across all venues!
     const whereClause = venueId ? { venueId } : {};
 
     const reservations = await prisma.boothReservation.findMany({

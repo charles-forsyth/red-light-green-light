@@ -45,10 +45,10 @@ export default function Application() {
   const [searchQuery, setSearchQuery] = useState("");
   const [panicMode, setPanicMode] = useState(false);
 
-  // Reservations State with Date Picker Support
+  // Global Reservations State (Across ALL Venues)
   const [reservations, setReservations] = useState<BoothReservation[]>(MOCK_RESERVATIONS);
   const [newBooth, setNewBooth] = useState<number>(4);
-  const [newDate, setNewDate] = useState<string>(new Date().toISOString().split("T")[0]); // Default to today's YYYY-MM-DD
+  const [newDate, setNewDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [newStartTime, setNewStartTime] = useState("11:00");
   const [newEndTime, setNewEndTime] = useState("12:30");
   const [newPref, setNewPreference] = useState<PreferenceType>("HANGOUT");
@@ -78,7 +78,7 @@ export default function Application() {
   // Self-Service Profile State
   const [editHandle, setEditHandle] = useState("");
 
-  // REAL-TIME WEBSOCKET/POLLING PRESENCE REFRESH & AUTO-EXPIRE (EVERY 5 SECONDS)
+  // FETCH ALL RESERVATIONS ACROSS ALL VENUES FOR ACCURATE GLOBAL COUNTS
   useEffect(() => {
     fetchLiveReservations();
     fetchLiveUsers();
@@ -88,14 +88,15 @@ export default function Application() {
       if (currentUser) {
         fetchUserMessages();
       }
-    }, 5000); // 5s Real-Time Sync & Auto-Expire
+    }, 5000); // 5s Global Sync
 
     return () => clearInterval(interval);
-  }, [selectedVenueId, currentUser]);
+  }, [currentUser]);
 
   const fetchLiveReservations = async () => {
     try {
-      const res = await fetch(`/api/reservations?venueId=${selectedVenueId}`);
+      // Query without venueId parameter to fetch ALL active reservations globally!
+      const res = await fetch(`/api/reservations`);
       const data = await res.json();
       if (data.success) {
         setReservations(data.reservations);
@@ -162,7 +163,7 @@ export default function Application() {
       });
       const data = await res.json();
       if (data.success && data.reservation) {
-        setReservations([data.reservation, ...reservations]);
+        fetchLiveReservations(); // Refresh global list immediately
         setActiveTab("booths");
         return;
       }
@@ -182,7 +183,7 @@ export default function Application() {
           userId: currentUser.id,
         }),
       });
-      setReservations(reservations.filter((r) => r.userId !== currentUser.id));
+      fetchLiveReservations(); // Refresh global list immediately
     } catch (e) {
       console.error("Instant check-out fallback");
     }
@@ -445,6 +446,8 @@ export default function Application() {
 
   // --- DASHBOARD FOR AUTHENTICATED USER ---
   const selectedVenue = venues.find((v) => v.id === selectedVenueId) || venues[0];
+
+  // Active reservations for the currently selected venue
   const filteredReservations = reservations.filter(
     (r) => r.venueId === selectedVenueId && (searchQuery === "" || r.userHandle.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -458,8 +461,8 @@ export default function Application() {
     (m) => m.receiverHandle.toLowerCase() === currentUser.handle.toLowerCase() || m.senderHandle.toLowerCase() === currentUser.handle.toLowerCase()
   );
 
-  // User Active Presence Check
-  const myActivePresence = reservations.find((r) => r.userId === currentUser.id && r.venueId === selectedVenueId);
+  // Check if current user is checked into ANY venue
+  const myActivePresenceAnywhere = reservations.find((r) => r.userId === currentUser.id);
 
   // Admin Actions
   const handleAdminAddUser = (e: React.FormEvent) => {
@@ -551,7 +554,7 @@ export default function Application() {
       });
       const data = await res.json();
       if (data.success && data.reservation) {
-        setReservations([data.reservation, ...reservations]);
+        fetchLiveReservations(); // Refresh global list
         setActiveTab("booths");
         setNewNote("");
         return;
@@ -605,7 +608,7 @@ export default function Application() {
             <p className="text-xs text-slate-400 flex items-center space-x-1">
               <span>Discrete Real-Time Booth Matchmaker</span>
               <span className="text-emerald-400 font-mono text-[10px] px-1.5 py-0.2 bg-emerald-950 rounded border border-emerald-800">
-                Date & Timeslot Support Active
+                Global Venue Sync Active
               </span>
             </p>
           </div>
@@ -654,13 +657,13 @@ export default function Application() {
               <span>On-Site Instant Check-In</span>
             </h3>
 
-            {myActivePresence ? (
+            {myActivePresenceAnywhere ? (
               <div className="space-y-2 bg-emerald-950/40 border border-emerald-500/30 p-3 rounded-lg text-xs">
                 <div className="text-emerald-300 font-bold flex items-center justify-between">
                   <span>Currently Checked In</span>
                   <span className="animate-ping w-2 h-2 rounded-full bg-emerald-400"></span>
                 </div>
-                <div className="text-slate-300">{selectedVenue.name}</div>
+                <div className="text-slate-300 font-semibold">{myActivePresenceAnywhere.venueName}</div>
                 <button
                   onClick={handleInstantCheckOut}
                   className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-slate-100 font-extrabold rounded text-xs transition flex items-center justify-center space-x-1 mt-1 shadow"
@@ -675,12 +678,12 @@ export default function Application() {
                 className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-extrabold rounded-lg text-xs transition shadow-lg shadow-emerald-950/50 flex items-center justify-center space-x-2"
               >
                 <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                <span>CHECK IN NOW (1-HR WINDOW)</span>
+                <span>CHECK IN NOW TO {selectedVenue.name.toUpperCase()}</span>
               </button>
             )}
           </div>
 
-          {/* Venue List */}
+          {/* Venue List with ACCURATE Real-Time Counts Across ALL Venues */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
               <span>Select Venue</span>
@@ -690,6 +693,7 @@ export default function Application() {
             <div className="space-y-2">
               {venues.map((venue) => {
                 const isSelected = venue.id === selectedVenueId;
+                // Count active reservations for THIS specific venue from global reservations array
                 const activeCount = reservations.filter((r) => r.venueId === venue.id).length;
                 return (
                   <button
@@ -706,7 +710,11 @@ export default function Application() {
                       <div className="text-xs text-slate-400 truncate max-w-[220px]">{venue.address}</div>
                     </div>
                     <div className="text-right">
-                      <span className="inline-block px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full border border-emerald-500/20">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded-full border ${
+                        activeCount > 0
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                          : "bg-slate-800/80 text-slate-500 border-slate-700/50"
+                      }`}>
                         {activeCount} Active
                       </span>
                     </div>
@@ -781,7 +789,7 @@ export default function Application() {
 
             <div className="hidden sm:flex items-center space-x-2 px-2">
               <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-              <span className="text-[11px] text-emerald-400 font-mono">Auto-Expire Active</span>
+              <span className="text-[11px] text-emerald-400 font-mono">Global Venue Sync</span>
             </div>
           </div>
 
