@@ -461,8 +461,14 @@ export default function Application() {
     (m) => m.receiverHandle.toLowerCase() === currentUser.handle.toLowerCase() || m.senderHandle.toLowerCase() === currentUser.handle.toLowerCase()
   );
 
-  // Check if current user is checked into ANY venue
-  const myActivePresenceAnywhere = reservations.find((r) => r.userId === currentUser.id);
+  // Check if current user is ACTUALLY checked in ON-SITE RIGHT NOW (startTime <= NOW <= endTime)
+  const now = new Date();
+  const myActivePresenceAnywhere = reservations.find((r) => {
+    if (r.userId !== currentUser.id) return false;
+    const start = new Date(r.startTime);
+    const end = new Date(r.endTime);
+    return start <= now && now <= end; // STRICT ON-SITE CHECK-IN WINDOW ONLY!
+  });
 
   // Admin Actions
   const handleAdminAddUser = (e: React.FormEvent) => {
@@ -608,7 +614,7 @@ export default function Application() {
             <p className="text-xs text-slate-400 flex items-center space-x-1">
               <span>Discrete Real-Time Booth Matchmaker</span>
               <span className="text-emerald-400 font-mono text-[10px] px-1.5 py-0.2 bg-emerald-950 rounded border border-emerald-800">
-                Global Venue Sync Active
+                Future Timeslot Isolation Fix
               </span>
             </p>
           </div>
