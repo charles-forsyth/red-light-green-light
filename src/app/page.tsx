@@ -8,27 +8,15 @@ import {
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
 import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile, Venue } from "@/types";
 
-const INITIAL_USERS: UserProfile[] = [
-  { id: "user-admin-chuck", handle: "chuck", email: "chuck.forsyth@gmail.com", subscriptionActive: true, role: "ADMIN" },
-  { id: "user-101", handle: "NeonKnight99", email: "neon99@proton.me", subscriptionActive: true, role: "PREMIUM" },
-  { id: "user-102", handle: "MidnightRider", email: "rider@anonmail.com", subscriptionActive: true, role: "PREMIUM" },
-  { id: "user-103", handle: "ShadowWalker", email: "shadow@tempmail.io", subscriptionActive: true, role: "MEMBER" },
-  { id: "user-104", handle: "CrimsonViper", email: "viper@secure.net", subscriptionActive: false, role: "MEMBER" },
-];
-
-const INITIAL_MESSAGES = [
-  { id: "msg-1", senderHandle: "NeonKnight99", receiverHandle: "chuck", content: "Hey Chuck! Are you over at Lawrenceville in Booth #4 right now?", createdAt: new Date(Date.now() - 20 * 60000).toISOString(), read: false },
-  { id: "msg-2", senderHandle: "MidnightRider", receiverHandle: "chuck", content: "Arriving at Painted Post around 11:30 AM if you want to watch videos.", createdAt: new Date(Date.now() - 5 * 60000).toISOString(), read: false },
-];
-
 export default function Application() {
   // Authentication & Session State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [loginHandle, setLoginHandle] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [authError, setAuthError] = useState("");
   const [ageVerified, setAgeVerified] = useState(false);
-  const [dbConnected, setDbConnected] = useState<boolean>(true);
 
   // App Core State
   const [venues, setVenues] = useState<Venue[]>(MOCK_VENUES);
@@ -46,7 +34,7 @@ export default function Application() {
   const [newNote, setNewNote] = useState("");
 
   // Admin User & Venue CRUD State
-  const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [adminSearch, setAdminSearch] = useState("");
   const [adminView, setAdminView] = useState<"users" | "venues">("users");
 
@@ -64,7 +52,7 @@ export default function Application() {
   // Direct Messaging State
   const [messagingTarget, setMessagingTarget] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState("");
-  const [allMessages, setAllMessages] = useState(INITIAL_MESSAGES);
+  const [allMessages, setAllMessages] = useState<any[]>([]);
 
   // Self-Service Profile State
   const [editHandle, setEditHandle] = useState("");
@@ -81,23 +69,18 @@ export default function Application() {
       const data = await res.json();
       if (data.success && data.reservations.length > 0) {
         setReservations(data.reservations);
-        setDbConnected(true);
       }
-    } catch (e) {
-      console.log("DB connection fallback to mock data");
-    }
+    } catch (e) {}
   };
 
   const fetchLiveUsers = async () => {
     try {
       const res = await fetch("/api/admin/users");
       const data = await res.json();
-      if (data.success && data.users.length > 0) {
+      if (data.success) {
         setUsers(data.users);
       }
-    } catch (e) {
-      console.log("DB users fallback");
-    }
+    } catch (e) {}
   };
 
   // PANIC HIDE SCREEN
@@ -120,9 +103,11 @@ export default function Application() {
     );
   }
 
-  // --- REAL AUTHENTICATION API HANDLERS ---
+  // --- STRICT AUTHENTICATION API HANDLERS ---
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError("");
+
     try {
       const res = await fetch("/api/auth", {
         method: "POST",
@@ -131,50 +116,31 @@ export default function Application() {
           action: "signin",
           handle: loginHandle,
           email: loginEmail,
-          password: "password123",
+          password: loginPassword,
         }),
       });
+
       const data = await res.json();
-      if (data.success) {
-        setCurrentUser(data.user);
-        setEditHandle(data.user.handle);
-        fetchLiveReservations();
+
+      if (!res.ok || !data.success) {
+        setAuthError(data.error || "Invalid credentials. Please check your username/password.");
         return;
       }
-    } catch (e) {
-      console.error("API Auth Fallback");
-    }
 
-    // Fallback if local
-    if (loginHandle.toLowerCase() === "chuck" || loginEmail.toLowerCase() === "chuck.forsyth@gmail.com") {
-      const adminAcc = users.find((u) => u.id === "user-admin-chuck") || INITIAL_USERS[0];
-      setCurrentUser(adminAcc);
-      setEditHandle(adminAcc.handle);
-      return;
-    }
-
-    const existing = users.find((u) => u.handle.toLowerCase() === loginHandle.toLowerCase() || u.email.toLowerCase() === loginEmail.toLowerCase());
-    if (existing) {
-      setCurrentUser(existing);
-      setEditHandle(existing.handle);
-    } else {
-      const created: UserProfile = {
-        id: `user-${Date.now()}`,
-        handle: loginHandle || "DiscreteMember",
-        email: loginEmail || "user@rlgl.app",
-        subscriptionActive: true,
-        role: "MEMBER",
-      };
-      setUsers([created, ...users]);
-      setCurrentUser(created);
-      setEditHandle(created.handle);
+      setCurrentUser(data.user);
+      setEditHandle(data.user.handle);
+      fetchLiveReservations();
+    } catch (e: any) {
+      setAuthError("Server connection error. Please try again.");
     }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError("");
+
     if (!ageVerified) {
-      alert("You must confirm you are 18 years of age or older to register.");
+      setAuthError("You must confirm you are 18 years of age or older to register.");
       return;
     }
 
@@ -186,35 +152,23 @@ export default function Application() {
           action: "signup",
           handle: loginHandle,
           email: loginEmail,
-          password: "password123",
+          password: loginPassword,
         }),
       });
+
       const data = await res.json();
-      if (data.success) {
-        setCurrentUser(data.user);
-        setEditHandle(data.user.handle);
-        fetchLiveReservations();
+
+      if (!res.ok || !data.success) {
+        setAuthError(data.error || "Failed to create account.");
         return;
       }
+
+      setCurrentUser(data.user);
+      setEditHandle(data.user.handle);
+      fetchLiveReservations();
     } catch (e) {
-      console.error("API Signup Fallback");
+      setAuthError("Server connection error. Please try again.");
     }
-
-    let assignedRole: "MEMBER" | "PREMIUM" | "ADMIN" = "MEMBER";
-    if (loginHandle.toLowerCase() === "chuck" || loginEmail.toLowerCase() === "chuck.forsyth@gmail.com") {
-      assignedRole = "ADMIN";
-    }
-
-    const created: UserProfile = {
-      id: `user-${Date.now()}`,
-      handle: loginHandle || "NewMember",
-      email: loginEmail || "member@rlgl.app",
-      subscriptionActive: true,
-      role: assignedRole,
-    };
-    setUsers([created, ...users]);
-    setCurrentUser(created);
-    setEditHandle(created.handle);
   };
 
   const handleSignOut = async () => {
@@ -229,6 +183,8 @@ export default function Application() {
     setCurrentUser(null);
     setLoginHandle("");
     setLoginEmail("");
+    setLoginPassword("");
+    setAuthError("");
   };
 
   const handleSelfDeleteAccount = async () => {
@@ -291,7 +247,7 @@ export default function Application() {
         <main className="max-w-4xl mx-auto px-6 py-12 text-center space-y-8">
           <div className="inline-flex items-center space-x-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-semibold">
             <Server className="w-3.5 h-3.5 text-emerald-400" />
-            <span>PostgreSQL & JWT Real Auth Active</span>
+            <span>Strict PostgreSQL & Password Verification Active</span>
           </div>
 
           <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-100">
@@ -309,7 +265,7 @@ export default function Application() {
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-md mx-auto shadow-2xl space-y-4 text-left">
             <div className="flex border-b border-slate-800 pb-3">
               <button
-                onClick={() => setAuthMode("signin")}
+                onClick={() => { setAuthMode("signin"); setAuthError(""); }}
                 className={`flex-1 text-center py-2 text-xs font-bold transition ${
                   authMode === "signin" ? "text-emerald-400 border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300"
                 }`}
@@ -317,7 +273,7 @@ export default function Application() {
                 Sign In
               </button>
               <button
-                onClick={() => setAuthMode("signup")}
+                onClick={() => { setAuthMode("signup"); setAuthError(""); }}
                 className={`flex-1 text-center py-2 text-xs font-bold transition ${
                   authMode === "signup" ? "text-emerald-400 border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300"
                 }`}
@@ -326,13 +282,20 @@ export default function Application() {
               </button>
             </div>
 
-            <form onSubmit={authMode === "signin" ? handleSignIn : handleSignUp} className="space-y-4 pt-2">
+            {authError && (
+              <div className="p-3 bg-rose-950/80 border border-rose-800/80 rounded-lg text-rose-300 text-xs flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <form onSubmit={authMode === "signin" ? handleSignIn : handleSignUp} className="space-y-4 pt-1">
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Discrete Member Handle</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. NeonKnight99"
+                  placeholder="e.g. NeonKnight99 or chuck"
                   value={loginHandle}
                   onChange={(e) => setLoginHandle(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -340,13 +303,25 @@ export default function Application() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Discrete Email / Login</label>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Discrete Email</label>
                 <input
                   type="email"
                   required
-                  placeholder="e.g. member@proton.me"
+                  placeholder="e.g. member@proton.me or chuck.forsyth@gmail.com"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Account Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Enter password..."
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -373,6 +348,10 @@ export default function Application() {
                 {authMode === "signin" ? "Sign In & Enter Dashboard" : "Start $5/mo Membership"}
               </button>
             </form>
+
+            <div className="pt-2 text-center text-[11px] text-slate-500">
+              Admin Login: Handle <strong className="text-amber-400">chuck</strong> | Password <strong className="text-amber-400">password123</strong>
+            </div>
           </div>
         </main>
 
@@ -1294,7 +1273,7 @@ export default function Application() {
               </button>
             </form>
           </div>
-        </div >
+        </div>
       )}
     </div>
   );
