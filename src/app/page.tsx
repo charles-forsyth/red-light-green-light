@@ -1,12 +1,32 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import {
   Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users,
   Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock, Inbox, Send, Server
 } from "lucide-react";
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
 import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile, Venue } from "@/types";
+
+// Dynamic import of Leaflet Map component (client-side only rendering)
+const VenueMap = dynamic(() => import("@/components/VenueMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[400px] bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-center text-slate-500 text-xs">
+      <RefreshCw className="w-4 h-4 animate-spin mr-2 text-emerald-400" />
+      Loading Geofenced Map Layer...
+    </div>
+  ),
+});
+
+const INITIAL_USERS: UserProfile[] = [
+  { id: "user-admin-chuck", handle: "chuck", email: "chuck.forsyth@gmail.com", subscriptionActive: true, role: "ADMIN" },
+  { id: "user-101", handle: "NeonKnight99", email: "neon99@proton.me", subscriptionActive: true, role: "PREMIUM" },
+  { id: "user-102", handle: "MidnightRider", email: "rider@anonmail.com", subscriptionActive: true, role: "PREMIUM" },
+  { id: "user-103", handle: "ShadowWalker", email: "shadow@tempmail.io", subscriptionActive: true, role: "MEMBER" },
+  { id: "user-104", handle: "CrimsonViper", email: "viper@secure.net", subscriptionActive: false, role: "MEMBER" },
+];
 
 export default function Application() {
   // Authentication & Session State
@@ -34,7 +54,7 @@ export default function Application() {
   const [newNote, setNewNote] = useState("");
 
   // Admin User & Venue CRUD State
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
   const [adminSearch, setAdminSearch] = useState("");
   const [adminView, setAdminView] = useState<"users" | "venues">("users");
 
@@ -57,17 +77,26 @@ export default function Application() {
   // Self-Service Profile State
   const [editHandle, setEditHandle] = useState("");
 
-  // Fetch Live DB Reservations & Users on Mount
+  // REAL-TIME WEBSOCKET/POLLING PRESENCE REFRESH (EVERY 5 SECONDS)
   useEffect(() => {
     fetchLiveReservations();
     fetchLiveUsers();
-  }, [selectedVenueId]);
+
+    const interval = setInterval(() => {
+      fetchLiveReservations();
+      if (currentUser) {
+        fetchUserMessages();
+      }
+    }, 5000); // 5s Real-Time Sync
+
+    return () => clearInterval(interval);
+  }, [selectedVenueId, currentUser]);
 
   const fetchLiveReservations = async () => {
     try {
       const res = await fetch(`/api/reservations?venueId=${selectedVenueId}`);
       const data = await res.json();
-      if (data.success && data.reservations.length > 0) {
+      if (data.success) {
         setReservations(data.reservations);
       }
     } catch (e) {}
@@ -77,8 +106,19 @@ export default function Application() {
     try {
       const res = await fetch("/api/admin/users");
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.users.length > 0) {
         setUsers(data.users);
+      }
+    } catch (e) {}
+  };
+
+  const fetchUserMessages = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/messages?userHandle=${currentUser.handle}`);
+      const data = await res.json();
+      if (data.success) {
+        setAllMessages(data.messages);
       }
     } catch (e) {}
   };
@@ -348,10 +388,6 @@ export default function Application() {
                 {authMode === "signin" ? "Sign In & Enter Dashboard" : "Start $5/mo Membership"}
               </button>
             </form>
-
-            <div className="pt-2 text-center text-[11px] text-slate-500">
-              Admin Login: Handle <strong className="text-amber-400">chuck</strong> | Password <strong className="text-amber-400">password123</strong>
-            </div>
           </div>
         </main>
 
@@ -475,29 +511,29 @@ export default function Application() {
     } catch (e) {
       console.error("Post reservation fallback");
     }
-
-    const created: BoothReservation = {
-      id: `res-${Date.now()}`,
-      userId: currentUser.id,
-      userHandle: currentUser.handle,
-      venueId: selectedVenueId,
-      venueName: selectedVenue.name,
-      boothNumber: newBooth,
-      startTime: startIso,
-      endTime: endIso,
-      status: "GREEN_LIGHT",
-      preference: newPref,
-      note: newNote || "Present at booth during timeslot.",
-    };
-
-    setReservations([created, ...reservations]);
-    setActiveTab("booths");
-    setNewNote("");
   };
 
-  const handleSendChatMessage = (e: React.FormEvent) => {
+  const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messagingTarget || !chatMessage) return;
+
+    try {
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderHandle: currentUser.handle,
+          receiverHandle: messagingTarget,
+          content: chatMessage,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.message) {
+        setAllMessages([...allMessages, data.message]);
+        setChatMessage("");
+        return;
+      }
+    } catch (e) {}
 
     const newMsg = {
       id: `msg-${Date.now()}`,
@@ -533,7 +569,7 @@ export default function Application() {
             <p className="text-xs text-slate-400 flex items-center space-x-1">
               <span>Discrete Real-Time Booth Matchmaker</span>
               <span className="text-emerald-400 font-mono text-[10px] px-1.5 py-0.2 bg-emerald-950 rounded border border-emerald-800">
-                PostgreSQL Active
+                PostgreSQL & Realtime Active
               </span>
             </p>
           </div>
@@ -629,7 +665,7 @@ export default function Application() {
           </div>
         </div>
 
-        {/* Right Column: Interactive Booths, Timeslot Form, Inbox, Profile & Admin Portal */}
+        {/* Right Column: Interactive Booths, Timeslot Form, Map, Inbox, Profile & Admin Portal */}
         <div className="lg:col-span-8 space-y-4">
           {/* Action Navigation Tabs */}
           <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-xl flex items-center justify-between overflow-x-auto">
@@ -641,6 +677,15 @@ export default function Application() {
                 }`}
               >
                 Active Booths ({filteredReservations.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("map")}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1 whitespace-nowrap ${
+                  activeTab === "map" ? "bg-slate-800 text-emerald-400 border border-emerald-500/30" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <MapIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Interactive Map</span>
               </button>
               <button
                 onClick={() => setActiveTab("new_reservation")}
@@ -672,7 +717,7 @@ export default function Application() {
               {currentUser.role === "ADMIN" && (currentUser.handle.toLowerCase() === "chuck" || currentUser.email.toLowerCase() === "chuck.forsyth@gmail.com") && (
                 <button
                   onClick={() => setActiveTab("admin")}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1 whitespace-nowrap ${
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 whitespace-nowrap ${
                     activeTab === "admin" ? "bg-slate-800 text-amber-400 border border-amber-500/30" : "text-amber-400/70 hover:text-amber-300"
                   }`}
                 >
@@ -683,8 +728,8 @@ export default function Application() {
             </div>
 
             <div className="hidden sm:flex items-center space-x-2 px-2">
-              <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" />
-              <span className="text-[11px] text-slate-500 font-mono">PostgreSQL Active</span>
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+              <span className="text-[11px] text-emerald-400 font-mono">Real-Time Sync</span>
             </div>
           </div>
 
@@ -782,6 +827,27 @@ export default function Application() {
                   );
                 })
               )}
+            </div>
+          )}
+
+          {/* Interactive Geofenced Map Component (Opens ONLY when 'Interactive Map' button is clicked) */}
+          {activeTab === "map" && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
+                  <MapIcon className="w-4 h-4 text-emerald-400" />
+                  <span>Geofenced Venue Map View</span>
+                </h3>
+                <span className="text-xs text-slate-400">Click any marker pin to view venue details</span>
+              </div>
+              <VenueMap
+                venues={venues}
+                selectedVenueId={selectedVenueId}
+                onSelectVenue={(id) => {
+                  setSelectedVenueId(id);
+                  setActiveTab("booths");
+                }}
+              />
             </div>
           )}
 
