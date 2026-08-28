@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
   Shield, Eye, Flame, MapPin, Search, Lock, User, Radio, RefreshCw, Settings, Users,
-  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock, Inbox, Send, Server, CheckCircle2, XCircle
+  Ban, CheckCircle, CreditCard, DollarSign, Activity, AlertTriangle, Plus, Trash2, Edit, LogOut, MessageSquare, Map as MapIcon, Key, Clock, Inbox, Send, Server, CheckCircle2, XCircle, Calendar
 } from "lucide-react";
 import { MOCK_VENUES, MOCK_RESERVATIONS } from "@/lib/data";
 import { BoothReservation, PreferenceType, VisibilityStatus, UserProfile, Venue } from "@/types";
@@ -45,9 +45,10 @@ export default function Application() {
   const [searchQuery, setSearchQuery] = useState("");
   const [panicMode, setPanicMode] = useState(false);
 
-  // Reservations State
+  // Reservations State with Date Picker Support
   const [reservations, setReservations] = useState<BoothReservation[]>(MOCK_RESERVATIONS);
   const [newBooth, setNewBooth] = useState<number>(4);
+  const [newDate, setNewDate] = useState<string>(new Date().toISOString().split("T")[0]); // Default to today's YYYY-MM-DD
   const [newStartTime, setNewStartTime] = useState("11:00");
   const [newEndTime, setNewEndTime] = useState("12:30");
   const [newPref, setNewPreference] = useState<PreferenceType>("HANGOUT");
@@ -528,11 +529,11 @@ export default function Application() {
     setUsers(users.map((u) => (u.id === userId ? { ...u, subscriptionActive: !u.subscriptionActive } : u)));
   };
 
+  // Create Reservation with Custom Date & Timeslot Selection
   const handleCreateReservation = async (e: React.FormEvent) => {
     e.preventDefault();
-    const todayStr = new Date().toISOString().split("T")[0];
-    const startIso = new Date(`${todayStr}T${newStartTime}:00`).toISOString();
-    const endIso = new Date(`${todayStr}T${newEndTime}:00`).toISOString();
+    const startIso = new Date(`${newDate}T${newStartTime}:00`).toISOString();
+    const endIso = new Date(`${newDate}T${newEndTime}:00`).toISOString();
 
     try {
       const res = await fetch("/api/reservations", {
@@ -545,7 +546,7 @@ export default function Application() {
           startTime: startIso,
           endTime: endIso,
           preference: newPref,
-          note: newNote || "Present at booth during timeslot.",
+          note: newNote || "Scheduled booth presence.",
         }),
       });
       const data = await res.json();
@@ -604,7 +605,7 @@ export default function Application() {
             <p className="text-xs text-slate-400 flex items-center space-x-1">
               <span>Discrete Real-Time Booth Matchmaker</span>
               <span className="text-emerald-400 font-mono text-[10px] px-1.5 py-0.2 bg-emerald-950 rounded border border-emerald-800">
-                Auto-Expire & Instant Check-In Active
+                Date & Timeslot Support Active
               </span>
             </p>
           </div>
@@ -849,11 +850,11 @@ export default function Application() {
                           <span className="text-amber-400 font-semibold">{prefLabel}</span>
                         </div>
                         <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
-                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Active Timeslot Window</span>
+                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Scheduled Date & Time</span>
                           <span className="text-slate-300 font-mono flex items-center space-x-1 mt-0.5">
                             <Clock className="w-3 h-3 text-emerald-400" />
                             <span>
-                              {new Date(res.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(res.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {new Date(res.startTime).toLocaleDateString([], { month: 'short', day: 'numeric' })} @ {new Date(res.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(res.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </span>
                         </div>
@@ -902,19 +903,33 @@ export default function Application() {
             </div>
           )}
 
-          {/* New Reservation Form with Explicit Start / End Times */}
+          {/* New Reservation Form with Explicit Date & Time Picker */}
           {activeTab === "new_reservation" && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
               <h3 className="text-sm font-bold text-slate-100 flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-emerald-400" />
-                <span>Post Timeslot & Booth Window</span>
+                <span>Schedule Future Timeslot & Booth Window</span>
               </h3>
               <p className="text-xs text-slate-400">
-                Specify your exact arrival and departure times at <strong className="text-emerald-400">{selectedVenue.name}</strong>.
+                Schedule a future presence date and time window at <strong className="text-emerald-400">{selectedVenue.name}</strong>.
               </p>
 
               <form onSubmit={handleCreateReservation} className="space-y-4 pt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-400 mb-1 flex items-center space-x-1">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Scheduled Date</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={newDate}
+                      onChange={(e) => setNewDate(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Booth Number (Optional)</label>
                     <input
@@ -926,7 +941,9 @@ export default function Application() {
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Start Time</label>
                     <input
@@ -969,7 +986,7 @@ export default function Application() {
                   <input
                     type="text"
                     maxLength={140}
-                    placeholder="e.g. In Booth #4 for the next hour, watching videos."
+                    placeholder="e.g. Visiting Booth #4 tomorrow evening."
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -981,7 +998,7 @@ export default function Application() {
                     type="submit"
                     className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-slate-950 font-extrabold rounded-lg text-xs transition shadow-lg shadow-emerald-950/40"
                   >
-                    Post Timeslot Now
+                    Post Scheduled Timeslot
                   </button>
                 </div>
               </form>
