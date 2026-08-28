@@ -53,6 +53,7 @@ export default function Application() {
   const [newEndTime, setNewEndTime] = useState("12:30");
   const [newPref, setNewPreference] = useState<PreferenceType>("HANGOUT");
   const [newNote, setNewNote] = useState("");
+  const [timeslotError, setTimeslotError] = useState("");
 
   // Admin User & Venue CRUD State
   const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
@@ -538,11 +539,19 @@ export default function Application() {
     setUsers(users.map((u) => (u.id === userId ? { ...u, subscriptionActive: !u.subscriptionActive } : u)));
   };
 
-  // Create Reservation with Custom Date & Timeslot Selection
+  // Create Reservation with Custom Date & Timeslot Selection + QA VALIDATION FIX!
   const handleCreateReservation = async (e: React.FormEvent) => {
     e.preventDefault();
-    const startIso = new Date(`${newDate}T${newStartTime}:00`).toISOString();
-    const endIso = new Date(`${newDate}T${newEndTime}:00`).toISOString();
+    setTimeslotError("");
+
+    const startIso = new Date(`${newDate}T${newStartTime}:00`);
+    const endIso = new Date(`${newDate}T${newEndTime}:00`);
+
+    // BUGFIX #1: Validate End Time is strictly AFTER Start Time!
+    if (endIso <= startIso) {
+      setTimeslotError("End time must be strictly after the start time.");
+      return;
+    }
 
     try {
       const res = await fetch("/api/reservations", {
@@ -552,8 +561,8 @@ export default function Application() {
           userId: currentUser.id,
           venueId: selectedVenueId,
           boothNumber: newBooth,
-          startTime: startIso,
-          endTime: endIso,
+          startTime: startIso.toISOString(),
+          endTime: endIso.toISOString(),
           preference: newPref,
           note: newNote || "Scheduled booth presence.",
         }),
@@ -563,6 +572,7 @@ export default function Application() {
         fetchLiveReservations(); // Refresh global list
         setActiveTab("booths");
         setNewNote("");
+        setTimeslotError("");
         return;
       }
     } catch (e) {
@@ -614,7 +624,7 @@ export default function Application() {
             <p className="text-xs text-slate-400 flex items-center space-x-1">
               <span>Discrete Real-Time Booth Matchmaker</span>
               <span className="text-emerald-400 font-mono text-[10px] px-1.5 py-0.2 bg-emerald-950 rounded border border-emerald-800">
-                Future Timeslot Isolation Fix
+                QA Audited v0.7.0
               </span>
             </p>
           </div>
@@ -927,6 +937,13 @@ export default function Application() {
               <p className="text-xs text-slate-400">
                 Schedule a future presence date and time window at <strong className="text-emerald-400">{selectedVenue.name}</strong>.
               </p>
+
+              {timeslotError && (
+                <div className="p-3 bg-rose-950/80 border border-rose-800/80 rounded-lg text-rose-300 text-xs flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{timeslotError}</span>
+                </div>
+              )}
 
               <form onSubmit={handleCreateReservation} className="space-y-4 pt-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
